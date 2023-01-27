@@ -1,7 +1,8 @@
 # esp32-rtty
 esp32 rtty
- this code is for a basic rtty receiver transmitter. It is currently unstable but it will sometimes transmit and receive a few characters.
+ this code is for a basic rtty receiver transmitter. It is a little unstable but it will  transmit and receive a few characters.
  
  work in progress.
- 
- it uses i2s microphone and da converter amplifier.
+inmp441 microphone
+MAX98357A audio amplifier
+
