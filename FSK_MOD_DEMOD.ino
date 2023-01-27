@@ -9,7 +9,7 @@ OLEDDisplayUi ui     ( &display );
 
 #define LED_BUILTIN 2
 //these settings are very sensitive
-#define TX_BUFFER_SIZE 1024
+#define TX_BUFFER_SIZE 4096
 #define RX_BUFFER_SIZE 64
 #define SAMPLE_RATE_MIC 32000
 #define SAMPLE_RATE_AMP 8000
@@ -24,7 +24,7 @@ OLEDDisplayUi ui     ( &display );
 #define I2S_OUT_LEFT_RIGHT_CLOCK GPIO_NUM_14
 #define I2S_OUT_SERIAL_DATA GPIO_NUM_26
 
-
+//MAX98357A
 i2s_config_t i2s_out_config = {
     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
     .sample_rate = SAMPLE_RATE_AMP,
@@ -67,24 +67,19 @@ i2s_pin_config_t i2s_mic_pins = {
     .data_in_num = I2S_MIC_SERIAL_DATA};
 
 //    Bell 202 AFSK uses a 1200 Hz tone for mark (typically a binary 1) and 2200 Hz for space (typically a binary 0).
-// Variables for the tone magnitudes
-float toneMarkMag, toneSpaceMag;
-
-//float samplingPeriodUs;
-//float outputPeriodUs;
 
 ///200 bw
 //#define MARK_FREQUENCY 1600
 //#define SPACE_FREQUENCY 1400
 #define MARK_FREQUENCY 2200
 #define SPACE_FREQUENCY 1200
-
+/*
 hw_timer_t * timer = NULL;
 volatile SemaphoreHandle_t timerSemaphore;
 volatile uint32_t isrCounter = 0;
 volatile uint32_t lastIsrAt = 0;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
+*/
 //int freqs[8]={697,770,852,941,1209,1336,1477,1633};
 
 
@@ -212,17 +207,27 @@ uint8_t baudotEncode(char c){
     
 return 0 ;
 }
-
+/*
 void  generateTone(int32_t *buff,uint16_t f,uint &last,uint16_t len){
-  uint16_t gain=4000;
+  uint16_t gain=8000;
   
   for(uint16_t i=0;i<len;i++){
       buff[i] = gain * sin(((float) last * M_PI * 2 * f) / (float) (SAMPLE_RATE_AMP));
       last++;      
   }
 }
-
-
+*/
+void i2sWriteTone(uint16_t f,uint &last ,uint16_t len){
+  uint16_t gain=8000;
+  int32_t s;
+  size_t bytes = 0;
+  
+  for(uint16_t i=0;i<len;i++){
+    s = gain * sin(((float) last * M_PI * 2 * f) / (float) (SAMPLE_RATE_AMP));
+    i2s_write(I2S_NUM_1, &s, sizeof(int32_t) , &bytes, 100);///write one character
+    last++;
+  }
+}
 
 String message;
 
@@ -235,52 +240,38 @@ unsigned long timer;
 
 
     uint bufferEnd=0;
+    i2s_zero_dma_buffer(I2S_NUM_1);
     i2s_start(I2S_NUM_1);
     
 //STOP BIT
- generateTone(txSamples,MARK_FREQUENCY,bufferEnd,samplesPerBit*1.5);
- i2s_write(I2S_NUM_1, txSamples, sizeof(int32_t)*samplesPerBit*1.5,&bytes, portMAX_DELAY);///write one character
- delay(bitTime*1.5);
-//Serial.println(bufferEnd);
+i2sWriteTone(MARK_FREQUENCY,bufferEnd ,samplesPerBit*1.5);
+
   for (int k=0;k<message.length();k++){
 
    Serial.println(message[k]);
 //START BIT
-   generateTone(txSamples,SPACE_FREQUENCY,bufferEnd,samplesPerBit);
-    i2s_write(I2S_NUM_1, txSamples, sizeof(int32_t)*samplesPerBit,&bytes, portMAX_DELAY);///write one character
-    delay(bitTime);
-//   Serial.println(bufferEnd);
+    i2sWriteTone(SPACE_FREQUENCY,bufferEnd ,samplesPerBit);
  
     char c=message[k];
     uint8_t value=baudotEncode(c);
-//    Serial.println(value);
 
     for(int j=0;j<5;j++){
       if((value>>j) & 0b00000001){
-         generateTone(txSamples,MARK_FREQUENCY,bufferEnd,samplesPerBit);
-        i2s_write(I2S_NUM_1, txSamples, sizeof(int32_t)*samplesPerBit,&bytes, portMAX_DELAY);///write one character
-        delay(bitTime);
+        i2sWriteTone(MARK_FREQUENCY,bufferEnd ,samplesPerBit);
       }
       else{
-        generateTone(txSamples,SPACE_FREQUENCY,bufferEnd,samplesPerBit);
-        i2s_write(I2S_NUM_1, txSamples, sizeof(int32_t)*samplesPerBit,&bytes, portMAX_DELAY);///write one character
-        delay(bitTime);    
+        i2sWriteTone(SPACE_FREQUENCY,bufferEnd ,samplesPerBit);
       }
     }
 
 //STOP BIT
-     generateTone(txSamples,MARK_FREQUENCY,bufferEnd,samplesPerBit*1.5);
 
-    i2s_write(I2S_NUM_1, txSamples, sizeof(int32_t)*samplesPerBit*1.5,&bytes, portMAX_DELAY);///write one character
-    //Serial.println("is2 error");
+    i2sWriteTone(MARK_FREQUENCY,bufferEnd ,samplesPerBit*1.5);
 
-    delay(bitTime*1.5);
-//    Serial.println(bufferEnd);
-    bufferEnd=0;
  }
-//delay(100);
+ 
+delay(200);
 i2s_stop(I2S_NUM_1);
-i2s_zero_dma_buffer(I2S_NUM_1);
  
 }
 //this receive is for inmp441 microphone
@@ -485,5 +476,6 @@ if (xSemaphoreTake(timerSemaphore, 0) == pdTRUE){
     }    
   }
 }
+
 
 
