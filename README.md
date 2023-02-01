@@ -6,3 +6,6 @@ esp32 rtty
 inmp441 microphone
 MAX98357A audio amplifier
 
+
+I used i2s because the adc only works at 1khz when the wifi is on and the dac needed an amplifier anyway. it uses a zero crossing
+detector to determine the audio frequency.
