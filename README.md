@@ -12,6 +12,8 @@ detector to determine the audio frequency.
 
 
 use minimodem to test.
+
+
 minimodem --tx --baudot  --mark 2200 --space 1200 rtty
 
 
