@@ -74,10 +74,15 @@ i2s_pin_config_t i2s_mic_pins = {
 #define SPACE_FREQUENCY 1200
 
 
-const float baud=45.45;
+//const float baud=45.45;
+//const float baud=100;
+const float baud=200;
+//const float baud=300;
+
+
 const int bitTime =1000*(1.0/baud);
 
-const uint samplesPerBit =SAMPLE_RATE_AMP/(baud-1);   
+const uint samplesPerBit =SAMPLE_RATE_AMP/(baud);   
 
 
 int32_t rxSamples[RX_BUFFER_SIZE];
@@ -153,6 +158,7 @@ unsigned long timer;
 
     uint bufferEnd=0;
     i2s_zero_dma_buffer(I2S_NUM_1);
+    delay(10);
     i2s_start(I2S_NUM_1);
     
 //STOP BIT
