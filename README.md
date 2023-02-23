@@ -13,3 +13,4 @@ minimodem --tx --baudot --mark 2200 --space 1200 --startbits 1 --stopbits 1.5 20
 
 
 trying to get to 300 baud but it would probably be better in hardware.
+Adding some extra files for backup and to help others.
