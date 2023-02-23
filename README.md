@@ -1,6 +1,7 @@
-# esp32-rtty
-esp32 rtty
- this code is for a basic rtty receiver transmitter. It is a little unstable but it will  transmit and receive a few characters.
+# esp32-audio
+fsk_mod_demod
+
+this code is for a basic rtty receiver transmitter. It is a little unstable but it will  transmit and receive a few characters.
  
  work in progress.
 inmp441 microphone
@@ -13,4 +14,10 @@ minimodem --tx --baudot --mark 2200 --space 1200 --startbits 1 --stopbits 1.5 20
 
 
 trying to get to 300 baud but it would probably be better in hardware.
-Adding some extra files for backup and to help others.
+
+
+Adding some extra files for backup and to help others.This is my resume....
+
+
+I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, so I can add wifi.
+DAC or ADC can be controlled by I2S0 only so you can't add both on I2S.
