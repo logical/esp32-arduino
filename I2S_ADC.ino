@@ -67,7 +67,6 @@ void loop()
 
   if (result == ESP_OK){
    int samples_read = bytes_read / sizeof(uint16_t);
-  // dump the samples out to the serial channel.
   if(samples_read<SAMPLE_BUFFER_SIZE){
     Serial.println("read error");
     return;
