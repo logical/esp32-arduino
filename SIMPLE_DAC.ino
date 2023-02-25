@@ -1,3 +1,5 @@
+// you need an amplifier to drive a speaker but the DAC output will drive a headphone earpiece.
+
 #include "soc/dac_channel.h"
 #include "driver/dac_common.h"
 #include "trust_wav.h"
