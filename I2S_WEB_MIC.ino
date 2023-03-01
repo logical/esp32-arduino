@@ -1,5 +1,5 @@
 /*
-join the access point then go to 192.168,4,1
+join the access point then go to 192.168.4.1
 */
 #include <WiFi.h>
 #include <WiFiAP.h>
