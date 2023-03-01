@@ -14,10 +14,6 @@ join the access point then go to 192.168.4.1
 </script>
 </head>
 <body>
-<form>
-<input type="text" id= "address">
-<input type="submit" value="connect" onclick="connect()" >
-</form>
 <audio controls autoplay>
   <source src="http://192.168.4.1/audio.wav" type="audio/wav">
 </audio>
