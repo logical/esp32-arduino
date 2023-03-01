@@ -60,7 +60,6 @@ i2s_config_t i2s_config = {
     .tx_desc_auto_clear = false,
     .fixed_mclk = 0};
 
-// and don't mess around with this
 i2s_pin_config_t i2s_mic_pins = {
     .mck_io_num = I2S_PIN_NO_CHANGE,
     .bck_io_num = I2S_SERIAL_CLOCK,
