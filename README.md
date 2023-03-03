@@ -25,4 +25,4 @@ I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, 
 DAC or ADC can be controlled by I2S0 only so you can't add both on I2S. I have not tested with wifi.
 
 
-This has already been thought of http://www.aprs.net/vm/DOS/MICE.HTM
+This is not a new invention. http://www.aprs.net/vm/DOS/MICE.HTM
