@@ -18,9 +18,6 @@ use minimodem to test.
 minimodem --tx --baudot --mark 2200 --space 1200 --startbits 1 --stopbits 1.5 200
 
 
-trying to get to 1200 baud but it would probably be better in hardware.
-
-
 I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, so I can add wifi.
 DAC or ADC can be controlled by I2S0 only so you can't add both on I2S. I have not tested with wifi.
 
