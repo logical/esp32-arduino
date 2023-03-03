@@ -4,7 +4,7 @@ this code is for a basic rtty receiver transmitter. It is a little unstable but 
 fsk_mod_demod : uses i2s microphone and speaker.inmp441 microphone.MAX98357A audio amplifier
 
 
-wired_fsk_mod_demod : uses wired connection. uses i2s receiver and tone to transmit using a square wave
+wired_fsk_mod_demod : uses wired connection. uses i2s receiver and tone to transmit using a square wave. 300bps, ascii.
 
 
 
