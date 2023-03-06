@@ -17,15 +17,31 @@ OLEDDisplayUi ui     ( &display );
 #define SPACE_FREQ 1200
 
 #define SAMPLE_BUFFER_SIZE 32
-#define SAMPLE_RATE 32000
 
-#define SQUELCH 300
+//I need to sample at right rate to capture at 1200 bps
+#define SAMPLE_RATE 38400
+//19200 effective rate
+const int8_t hiI[16]={  0  ,  84  , 127  , 106 ,   33 ,  -57 , -118  ,-121  , -64 ,   25 ,  102,   128,    91 ,    8 ,  -78,  -126};
+const int8_t hiQ[16]={128  ,  96  ,  17  , -71 , -124 , -115 ,  -49  ,  41  , 111 ,  126 ,   78,    -8,   -91 , -128 , -102,   -25};
+const int8_t loI[16]={  0  ,  49  ,  91  , 118 ,  128 ,  118 ,   91  ,  49  ,   0 ,  -49 ,  -91,  -118,  -128 , -118 ,  -91,   -49};
+const int8_t loQ[16]={128  , 118  ,  91  ,  49 ,    0 ,  -49 ,  -91  ,-118  ,-128 , -118 ,  -91,   -49,     0 ,   49 ,   91,   118};
+
+/*
+//sampled at 16000
+int8_t hiI[16]={ 0   , 97,   126  ,  67   ,-40  ,-118 , -114 ,  -30 ,   75 ,  128  ,  91  , -10 , -104 , -124   ,-58 ,   49};
+int8_t hiQ[16]={128    ,83  , -20 , -109 , -122,   -49  ,  58  , 124 ,  104   , 10  , -91 , -128   ,-75   , 30  , 114  , 118};
+int8_t loI[16]={0  ,  58 ,  104 ,  126,   122  ,  91 ,   40  , -20  , -75 , -114,  -128,  -114 ,  -75 ,  -20  ,  40  ,  91};
+int8_t loQ[16]={28  , 114 ,   75,    20 ,  -40   ,-91  ,-122 , -126,  -104  , -58 ,    0  ,  58 ,  104  , 126 ,  122   , 91};
+*/
+
+#define SQUELCH 400
 
 #define BAUD 600
 const int bitTime =1000000*(1.0/BAUD);//time in us
 
 int16_t rawSamples[SAMPLE_BUFFER_SIZE];
-int16_t sampleData[SAMPLE_BUFFER_SIZE/2];
+const uint8_t sampleDataSize =SAMPLE_BUFFER_SIZE/2;
+int16_t sampleData[sampleDataSize];
 
 
 i2s_config_t i2s_config = {
@@ -89,11 +105,6 @@ void transmitFSK(String sendMessage){
  const uint8_t markZero = SAMPLE_RATE/4/MARK_FREQ/2;
   const uint8_t spaceZero = SAMPLE_RATE/4/SPACE_FREQ/2;
 
-int8_t hiI[16]={ 0   , 97,   126  ,  67   ,-40  ,-118 , -114 ,  -30 ,   75 ,  128  ,  91  , -10 , -104 , -124   ,-58 ,   49};
-int8_t hiQ[16]={128    ,83  , -20 , -109 , -122,   -49  ,  58  , 124 ,  104   , 10  , -91 , -128   ,-75   , 30  , 114  , 118};
-int8_t loI[16]={0  ,  58 ,  104 ,  126,   122  ,  91 ,   40  , -20  , -75 , -114,  -128,  -114 ,  -75 ,  -20  ,  40  ,  91};
-int8_t loQ[16]={28  , 114 ,   75,    20 ,  -40   ,-91  ,-122 , -126,  -104  , -58 ,    0  ,  58 ,  104  , 126 ,  122   , 91};
-
 int8_t readBit(){
   
   bool squelch=false;
@@ -105,8 +116,8 @@ int8_t readBit(){
   
   esp_err_t result=i2s_read(I2S_NUM_0, rawSamples, sizeof(int16_t)*SAMPLE_BUFFER_SIZE, &bytes, portMAX_DELAY);
 
-  int samples_read = bytes / sizeof(uint16_t);
-
+//  int samples_read = bytes / sizeof(uint16_t);
+/*
   if (result != ESP_OK){
     Serial.println("read error");
     return -1;
@@ -117,30 +128,38 @@ int8_t readBit(){
     Serial.println("read error");
     return -1;
   }
-
-  for(int i=0,j=0;i<SAMPLE_BUFFER_SIZE;i+=2){
+*/
+  for(int i=0,j=0;i<SAMPLE_BUFFER_SIZE;j++,i+=2){ 
     sampleData[j]=((rawSamples[i] & 0x0FFF)+(rawSamples[i+1] & 0x0FFF))/2;
     av+=sampleData[j];
-    j++;
   }
   
-    av/=SAMPLE_BUFFER_SIZE/2;
-    for(int i=0;i<(SAMPLE_BUFFER_SIZE/2);i++){
-      sampleData[i]-=av;
-//      sampleData[i]*=4;
+  av/=sampleDataSize;
+  for(int i=0;i<sampleDataSize;i++){
+    sampleData[i]-=av;
+//      sampleData[i]*=2;
 //    Serial.println(sampleData[i]);    
 
-      if(sampleData[i] > SQUELCH)squelch=true;     
+    if(sampleData[i] > SQUELCH)squelch=true;     
 
-      outloi += sampleData[i] * loI[i];
-      outloq += sampleData[i] * loQ[i];
-      outhii += sampleData[i] * hiI[i];
-      outhiq += sampleData[i] * hiQ[i];
-    }
-// Serial.println(outhii * outhii + outhiq * outhiq - outloi * outloi + outloq * outloq);
+    outloi += sampleData[i] * loI[i];
+    outloq += sampleData[i] * loQ[i];
+    outhii += sampleData[i] * hiI[i];
+    outhiq += sampleData[i] * hiQ[i];
+  }
+#define SHIFT 16  
 
-int32_t magl=sqrt(outloi*outloi+outloq*outloq);
-int32_t magh=sqrt(outhii*outhii+outhiq*outhiq);
+//uint32_t diff=(outhii >> SHIFT) * (outhii >> SHIFT) + (outhiq >> SHIFT) * (outhiq >> SHIFT) - (outloi >> SHIFT) * (outloi >> SHIFT) - (outloq >> SHIFT) * (outloq >> SHIFT);
+//Serial.println(diff);
+  int32_t magl=sqrt(outloi*outloi+outloq*outloq);
+  int32_t magh=sqrt(outhii*outhii+outhiq*outhiq);
+/*
+Serial.print(magl);
+Serial.print(" ");
+Serial.print(magh);
+Serial.print(" ");
+Serial.println(" " );
+*/
 /*
 Serial.print(outloi);
 Serial.print(" ");
@@ -152,16 +171,9 @@ Serial.print(outhiq);
 Serial.print(" ");
 Serial.println(" " );
 */
-/*
-Serial.print(magl);
-Serial.print(" ");
-Serial.print(magh);
-Serial.print(" ");
-Serial.println(" ");
-*/
 
-if(squelch==false)return -1;
-if(magl<magh)return 1;
+if(!squelch)return -1;
+if(magh>magl)return 1;
 return 0;
 
 
@@ -191,24 +203,20 @@ static int demodulate (int16_t data[], int idx) {
 }
 */
 
-inline char receiveASCII(){
+ char receiveASCII(){
     uint16_t count;
 unsigned long startTime,endTime;
     uint8_t newchar=0b00000000;
 
 
   int8_t newbit=0;
-  int8_t bits=0;
 
-  while(readBit()==1); //wait for stop bit to finish   
+  for(count=0;count<2000;count++){if(readBit()!=1)break;} //wait for stop bit to finish   
   delayMicroseconds(bitTime*1.5);// skip 0 start bit
-
-  for(bits=0;bits<8;bits++){
+  for(int8_t bits=0;bits<8;bits++){
     startTime=micros();
     newbit=readBit();
-//      Serial.print(newbit);
-    if(newbit==-1)newbit=readBit();//error correction
-    if(newbit==-1)return 0;
+//    if(newbit==-1)return ' ';
     newchar |= (bool(newbit) << bits);
     delayMicroseconds(bitTime-(micros()-startTime));
   }
@@ -282,7 +290,6 @@ unsigned long startTime,endTime;
   }
 
 }
-
 
 
 
