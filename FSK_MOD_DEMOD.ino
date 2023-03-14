@@ -1,3 +1,6 @@
+#pragma GCC optimize("Ofast")
+#pragma GCC target("avx,avx2,fma")
+
 #include "SSD1306Wire.h" // legacy include: `#include "SSD1306.h"`
 #include "OLEDDisplayUi.h"
 SSD1306Wire display(0x3c, SDA, SCL);  // ADDRESS, SDA, SCL  -  SDA and SCL usually populate automatically based on your board's pins_arduino.h e.g. https://github.com/esp8266/Arduino/blob/master/variants/nodemcu/pins_arduino.h
@@ -65,7 +68,7 @@ i2s_pin_config_t i2s_mic_pins = {
     .data_out_num = I2S_PIN_NO_CHANGE,
     .data_in_num = I2S_MIC_SERIAL_DATA};
 
-//    Bell 202 AFSK uses a 1200 Hz tone for mark (typically a binary 1) and 2200 Hz for space (typically a binary 0).
+//    Bell 202 AFSK uses a 1200 Hz tone for mark (typically a binary 1) and 2200 Hz for space (typically a binary 0).
 
 ///200 bw
 //#define MARK_FREQUENCY 1600
@@ -76,11 +79,11 @@ i2s_pin_config_t i2s_mic_pins = {
 
 //const float baud=45.45;
 //const float baud=100;
-const float baud=200;
+const float baud=300;
 //const float baud=300;
 
 
-const int bitTime =1000*(1.0/baud);
+const int bitTime =1000000*(1.0/baud);
 
 const uint samplesPerBit =SAMPLE_RATE_AMP/(baud);   
 
@@ -240,15 +243,15 @@ unsigned long startTime,endTime;
   int8_t bits=0;
 
 //about 1-2 ms per read
-     startTime=millis();
+     startTime=micros();
 
    ///for(count=0;count<200;count++)if(readBit(rxSamples,RX_BUFFER_SIZE)==0)break; ///one start bit
    for(count=0;count<500;count++)if(readBit(rxSamples,RX_BUFFER_SIZE)==1)break; ///one start bit
     if (count==500)return 0;
-    startTime=millis();
+    startTime=micros();
     while(readBit(rxSamples,RX_BUFFER_SIZE)==1);    
  //   if(millis()-startTime < bitTime*1.5)return 0;//make sure its a stop bit
-    delay(bitTime*1.5);// skip 0
+    delayMicroseconds(bitTime*1.5);// skip 0
 
     for(bits=0;bits<5;bits++){//5 data bits
       newbit=readBit(rxSamples,RX_BUFFER_SIZE);
@@ -257,7 +260,7 @@ unsigned long startTime,endTime;
       if(newbit==-1)newbit=readBit(rxSamples,RX_BUFFER_SIZE);//error correction
       if(newbit==-1 )return 0;
       newchar |= (bool(newbit) << bits);
-       delay(bitTime);
+       delayMicroseconds(bitTime);
     }
 //    delay(bitTime);
 //    for(uint8_t i=0;i<200;i++)if(readBit(rxSamples,RX_BUFFER_SIZE)==0)break;//zero stop bit
@@ -339,5 +342,7 @@ unsigned long startTime,endTime;
     }    
   }
 }
+
+
 
 
