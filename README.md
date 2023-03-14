@@ -4,7 +4,7 @@ this code is for a basic rtty receiver transmitter. It is a little unstable but 
 fsk_mod_demod : uses i2s microphone and speaker.inmp441 microphone.MAX98357A audio amplifier
 
 
-wired_fsk_mod_demod : uses wired connection. uses i2s receiver and tone to transmit using a square wave. 300bps, ascii.
+fsk_mod_demod_experimental : uses wired connection. uses i2s receiver and tone to transmit using a square wave. 1200bps, but has very bad reception.
 
 
 
@@ -16,6 +16,9 @@ use minimodem to test.
 
 
 minimodem --tx --baudot --mark 2200 --space 1200 --startbits 1 --stopbits 1.5 200
+
+
+minimodem --tx --ascii --mark 2200 --space 1200 --startbits 1 --stopbits 2 1200.0
 
 
 I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, so I can add wifi.
