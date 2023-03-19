@@ -18,7 +18,7 @@ use minimodem to test.
 minimodem --tx --baudot --mark 2200 --space 1200 --startbits 1 --stopbits 1.5 200
 
 
-minimodem --tx --ascii --mark 2200 --space 1200 --startbits 1 --stopbits 2 1200.0
+minimodem --tx --ascii  --mark 1200 --space 2200 --startbits 1 --stopbits 2  1200.00
 
 
 I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, so I can add wifi.
