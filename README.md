@@ -9,7 +9,7 @@ fsk_mod_demod_experimental : uses wired connection. uses i2s receiver and tone t
 
 
 their reliability is about 80% and they have no error correction.
-I am looking for suggestions on how to get the baud rates up to 1200 if it is possible.
+I am looking for suggestions on how to get the reliability up.
 
 
 use minimodem to test.
@@ -26,3 +26,6 @@ DAC or ADC can be controlled by I2S0 only so you can't add both on I2S. I have n
 
 
 This is not a new invention. http://www.aprs.net/vm/DOS/MICE.HTM
+
+
+also made a web streaming microphone
