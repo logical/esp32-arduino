@@ -20,7 +20,7 @@
 #define SQUELCH 2000
 #define BAUD 1200
 #define SAMPLE_BUFFER_SIZE 352 // 16 samples per bit * 11 bits per character(2 stop bits)*2 samples averaged 352 samples per character
-#define SAMPLE_DATA_SIZE 32000
+#define SAMPLE_DATA_SIZE 32000 //about 90 characters
 
 const int bitSize = ((SAMPLE_RATE/2)/BAUD);
 const int bitTime = 1000000*(1.0/BAUD);//time in us
@@ -108,20 +108,29 @@ bool getSampleData(){
   return squelch;  
 }
 
+void DCRemove(void){
+  long av=0; 
+
+  for(int i=0;i<sampleDataSize;i++){ 
+    av+=sampleData[i];
+  }
+
+  av/=sampleDataSize;
+
+  for(int i=0;i<sampleDataSize;i++){ 
+    sampleData[i]-=av;
+//    Serial.println(sampleData[i]);delay(100);
+  }
+
+}
 
 int8_t readBit(uint16_t index){
-  float av=0; 
   float outloi = 0, outloq = 0, outhii = 0, outhiq = 0;
   int16_t sample;
   
-  for(int i=0;i<sizeof(loI);i++){ 
-    av+=sampleData[index+i];
-  }
-
-  av/=sizeof(loI);
 
   for(int i=0;i<sizeof(loI);i++){
-    sample=sampleData[index+i]-av;
+    sample=sampleData[index+i];
 //    Serial.println(sample);delay(100);
     outloi += sample * loI[i];
     outloq += sample * loQ[i];
@@ -132,42 +141,41 @@ int8_t readBit(uint16_t index){
   float magMark=sqrt(outloi*outloi+outloq*outloq);
   float magSpace=sqrt(outhii*outhii+outhiq*outhiq);
 /*
-Serial.print(magl);
+//Serial.print(" {MARK=");
+Serial.print(magMark);
 Serial.print(" ");
-Serial.print(magh);
+Serial.print(magSpace);
 Serial.print(" ");
 Serial.println(" ");
 */
-//if(magh<10000 || magl <10000)return -1;
+
+  if(magMark<10000 && magSpace <10000)return -1;
   if(magMark>magSpace)return 1;
   return 0;
 
 
 }
-/*
+
 
  const uint8_t markZero = SAMPLE_RATE/2/MARK_FREQ/2;
  const uint8_t spaceZero = SAMPLE_RATE/2/SPACE_FREQ/2;
 
 int8_t readBitZero(uint16_t index){
    float av; 
-   uint16_t zeros[2]={0,BIT_SIZE};
+   uint16_t zeros[2]={0,bitSize};
    uint16_t count=0;
    uint16_t diff=0;
-  int16_t sample[BIT_SIZE];
+   int16_t sample[bitSize];
 //remove average
-   for(int i=0;i<BIT_SIZE;i++){ 
-    av+=sampleData[index+i];
-  }
 
-  av/=BIT_SIZE;
 
-  for(int i=0;i<BIT_SIZE;i++){
-    sample[i]=sampleData[index+i]-av;
+  for(int i=0;i<bitSize;i++){
+    sample[i]=sampleData[index+i];
+//    Serial.println(sample[i]); delay(100);   
   }    
 
-  for(uint16_t i=1;i<BIT_SIZE;i++){      
-    if( sample[i-1]>0 && sample[i]<0  ||  sample[i-1]<0 && sample[i]>0)zeros[count++]=i;//read half cycles
+  for(uint16_t i=1;i<bitSize;i++){      
+    if( ((sample[i-1]>0) && (sample[i]<0))  ||  ((sample[i-1]<0) && (sample[i]>0)))zeros[count++]=i;//read half cycles
     if(count==2)break;        
   }
   
@@ -178,56 +186,54 @@ int8_t readBitZero(uint16_t index){
   if((diff <= (markZero+1))  && (diff >= (markZero-1)))return 1; //bandpass filter  
   if((diff <= (spaceZero+1))  && (diff >= (spaceZero-1)))return 0; //bandpass filter  
 //this one failed try the other one
-  return readBit(index);   
+  return -1;   
 
 }
-*/
+
 
 String txMessage;
 void receiveASCII(){
-   uint16_t sample=0;
-    size_t bytes=0;
-    uint8_t newchar=0b00000000;
-    int8_t newbit=0;
-    uint16_t index=0;
-    String rxMessage;    
-// while(1){
+  uint16_t sample=0;
+  size_t bytes=0;
+  uint8_t newchar=0b00000000;
+  int8_t newbit=0;
+  uint16_t index=0;
+  String rxMessage;    
    
-   sample=0;
-   bytes=0;
-
+  i2s_read(I2S_NUM_0, &sample, sizeof(int16_t), &bytes, portMAX_DELAY);
+  sample &=0x0FFF;
+  if(sample > SQUELCH){
+    sampleDataSize=0;
+    while(getSampleData() && (sampleDataSize<SAMPLE_DATA_SIZE));//get all data recorded
+    DCRemove();
+    index=0;
+    while(index<sampleDataSize){//start bit decoder
+      newbit=0;
+      newchar=0b00000000;
+      index+=bitSize; //skip stop bit
+      index+=bitSize; //skip stop bit
       
-    i2s_read(I2S_NUM_0, &sample, sizeof(int16_t), &bytes, portMAX_DELAY);
-    sample &=0x0FFF;
-    if(sample > SQUELCH){
-      sampleDataSize=0;
-      while(getSampleData() && (sampleDataSize<SAMPLE_DATA_SIZE));//get all data recorded
-      index=0;
-      while(index<sampleDataSize){//start bit decoder
-        newbit=0;
-        newchar=0b00000000;
-        while(readBit(index)==1){index+=4;}
+      while(readBit(index)==1){index+=8;}//look for start bit
+  //    index+=bitSize;//skip this bit
+      for(int8_t bits=0;bits<8;bits++){
+        index+=bitSize;
+        newbit=readBit(index);
+ //       Serial.print(newbit);
+
+        if(newbit==-1){newchar=0;break;}          
+ 
+        newchar |= (bool(newbit) << bits);
+
+      }
+
+      if(newchar>0){
+//        Serial.printf(" %X ",newchar);
+        Serial.print((char)newchar);
         
-        index+=bitSize;//skip this bit
+      }
+    }  //end bit decoder  
 
-        for(uint8_t bits=0;bits<8;bits++){
-
-          newbit=readBit(index);
-    //      Serial.print(newbit);
-          newchar |= (bool(newbit) << bits);
-
-          index+=bitSize;
-
-
-        }
-        index+=bitSize;
-        index+=bitSize;
-
-        if(newchar>0){
-          Serial.print((char)newchar);
-        }
-      }  //end bit decoder  
-   }
+  }
 }
 //transmit
 void transmitASCII(){
