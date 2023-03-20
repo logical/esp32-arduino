@@ -4,12 +4,7 @@ this code is for a basic rtty receiver transmitter. It is a little unstable but 
 fsk_mod_demod : uses i2s microphone and speaker.inmp441 microphone.MAX98357A audio amplifier
 
 
-fsk_mod_demod_experimental : uses wired connection. uses i2s receiver and tone to transmit using a square wave. 1200bps, but has very bad reception.
-
-
-
-their reliability is about 80% and they have no error correction.
-I am looking for suggestions on how to get the reliability up.
+fsk_mod_demod_experimental : uses wired connection. uses i2s receiver and tone to transmit using a square wave. 1200bps, but has very bad reception. About 80% . I am looking for suggestions on how to get the reliability up. Not sure yet what to do from here . Maybe back off the baud rate to build reliability if that is possible or add error correction.
 
 
 use minimodem to test.
