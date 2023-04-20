@@ -1,9 +1,11 @@
 # esp32-arduino
-this code is for a basic rtty receiver transmitter. It is a little unstable but it will  transmit and receive a few characters.
+
+My projects for esp32.
 
 ### fsk_mod_demod 
 
-uses i2s microphone and speaker.inmp441 microphone.MAX98357A audio amplifier
+this code is for a basic rtty receiver transmitter. It is a little unstable but it will  transmit and receive a few characters.
+It uses i2s microphone and speaker.inmp441 microphone.MAX98357A audio amplifier
 
 
 ### fsk_mod_demod_experimental 
