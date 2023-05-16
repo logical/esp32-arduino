@@ -195,21 +195,16 @@ IPAddress myIP = WiFi.softAPIP();
 }
 
 void swapFormats(pixformat_t pixfmt){
-  if(pixfmt != PIXFORMAT_JPEG){
-    cameraConfig.pixel_format=PIXFORMAT_JPEG;
-    cameraConfig.jpeg_quality = 10;
-    cameraConfig.fb_count = 2;
-    cameraConfig.grab_mode = CAMERA_GRAB_LATEST;
-    cameraConfig.frame_size = FRAMESIZE_UXGA;
+  sensor_t * s = esp_camera_sensor_get();
+  if(pixfmt == PIXFORMAT_JPEG){
+    s->set_pixformat(s,PIXFORMAT_JPEG);
+    s->set_quality(s,10);
+    s->set_framesize (s,FRAMESIZE_UXGA);
   } else {
     // Best option for face detection/recognition
-    cameraConfig.pixel_format=PIXFORMAT_RGB565;
-    cameraConfig.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-    cameraConfig.frame_size = FRAMESIZE_240X240;
-    cameraConfig.fb_count = 1;
-    
+    s->set_pixformat(s,PIXFORMAT_RGB565);
+    s->set_framesize(s,FRAMESIZE_240X240);    
   }
-
 
 }
 void loop() {
@@ -283,8 +278,8 @@ void motion_detect(camera_fb_t *fb ){
 //      uint16_t ii= yy * (fb->width/10) + xx;
       
 
-      uint8_t r1=fb->buf[y*x*2] & 0b11111;//check red only
-      uint8_t r2=lastrgb565[yy][xx] & 0b11111;
+      uint8_t r1=fb->buf[y*x*2] & 0b11111000;//check red only
+      uint8_t r2=lastrgb565[yy][xx] & 0b11111000;
       uint8_t diff=abs(r1-r2);
      
       lastrgb565[yy][xx]=fb->buf[y*x*2];//set last pixel
@@ -306,6 +301,8 @@ void motion_detect(camera_fb_t *fb ){
   if(motion==true){
 //      ESP_LOGE(TAG, "Motion detected %d %d %d %d",rectx0,recty0,rectx1,recty1);
     draw_box(&rfb,rectx0,recty0,rectx1-rectx0,recty1-recty0,0x00ff00);              
+//    enable_led(1);
+
   }      
 }
 
@@ -459,3 +456,4 @@ void startCameraServer(void)
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
 }
+
