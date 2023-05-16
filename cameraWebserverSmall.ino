@@ -1,26 +1,27 @@
-#include <esp_http_server.h>
-#include "esp_timer.h"
-#include "esp_camera.h"
-#include "img_converters.h"
-#include "fb_gfx.h"
-#include "driver/ledc.h"
-#include "sdkconfig.h"
 
-#if defined(ARDUINO_ARCH_ESP32) && defined(CONFIG_ARDUHAL_ESP_LOG)
-#include "esp32-hal-log.h"
-#define TAG ""
-#else
+// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <esp_http_server.h>
+#include <esp_camera.h>
+#include <fb_gfx.h>
+#include <EEPROM.h>
+#include <WiFi.h>
+
 #include "esp_log.h"
 static const char *TAG = "camera_httpd";
-#endif
 
-
-//#if CONFIG_ESP_FACE_DETECT_ENABLED
-
-#include <vector>
-
-#define TWO_STAGE 1 /*<! 1: detect by two-stage which is more accurate but slower(with keypoints). */
-                    /*<! 0: detect by one-stage which is less accurate but faster(without keypoints). */
 
 
 #define QUANT_TYPE 0 //if set to 1 => very large firmware, very slow, reboots when streaming...
@@ -38,19 +39,6 @@ bool isStreaming = false;
 
 
 
-
-#include "esp_camera.h"
-#include "EEPROM.h"
-#include <WiFi.h>
-
-//
-// WARNING!!! PSRAM IC required for UXGA resolution and high JPEG quality
-//            Ensure ESP32 Wrover Module or other board with PSRAM is selected
-//            Partial images will be transmitted if image exceeds buffer size
-//
-//            You must select partition scheme from the board menu that has at least 3MB APP space.
-//            Face Recognition is DISABLED for ESP32 and ESP32-S2, because it takes up from 15 
-//            seconds to process single frame. Face Detection is ENABLED if PSRAM is enabled as well
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -78,7 +66,53 @@ bool isStreaming = false;
 String ssid;
 String pass;
 
-void startCameraServer();
+
+ String HTML = R"***(
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>ESP32 OV2460</title>
+    </head>
+    <body>
+<img id="stream" src="" crossorigin>
+<button id="toggle-stream">Start Stream</button>
+        <script>
+document.addEventListener('DOMContentLoaded', function (event) {
+  var baseHost = document.location.origin
+  var streamUrl = baseHost + ':81'
+
+
+  const view = document.getElementById('stream')
+  const streamButton = document.getElementById('toggle-stream')
+const stopStream = () => {
+    window.stop();
+    streamButton.innerHTML = 'Start Stream'
+  }
+
+  const startStream = () => {
+    view.src = `${streamUrl}/stream`
+//    show(viewContainer)
+    streamButton.innerHTML = 'Stop Stream'
+  }
+    streamButton.onclick = () => {
+    const streamEnabled = streamButton.innerHTML === 'Stop Stream'
+    if (streamEnabled) {
+      stopStream()
+    } else {
+      startStream()
+    }
+  }
+
+});
+        </script>
+    </body>
+</html>
+)***";
+
+  camera_config_t cameraConfig;
+
 
 void setup() {
   Serial.begin(115200);
@@ -87,61 +121,52 @@ void setup() {
   Serial.println();
     EEPROM.begin(EEPROM_SIZE);
 
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.frame_size = FRAMESIZE_UXGA;
-  config.pixel_format = PIXFORMAT_JPEG; // for streaming
-  //config.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
-  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-  config.fb_location = CAMERA_FB_IN_PSRAM;
-  config.jpeg_quality = 12;
-  config.fb_count = 1;
+  cameraConfig.ledc_channel = LEDC_CHANNEL_0;
+  cameraConfig.ledc_timer = LEDC_TIMER_0;
+  cameraConfig.pin_d0 = Y2_GPIO_NUM;
+  cameraConfig.pin_d1 = Y3_GPIO_NUM;
+  cameraConfig.pin_d2 = Y4_GPIO_NUM;
+  cameraConfig.pin_d3 = Y5_GPIO_NUM;
+  cameraConfig.pin_d4 = Y6_GPIO_NUM;
+  cameraConfig.pin_d5 = Y7_GPIO_NUM;
+  cameraConfig.pin_d6 = Y8_GPIO_NUM;
+  cameraConfig.pin_d7 = Y9_GPIO_NUM;
+  cameraConfig.pin_xclk = XCLK_GPIO_NUM;
+  cameraConfig.pin_pclk = PCLK_GPIO_NUM;
+  cameraConfig.pin_vsync = VSYNC_GPIO_NUM;
+  cameraConfig.pin_href = HREF_GPIO_NUM;
+  cameraConfig.pin_sscb_sda = SIOD_GPIO_NUM;
+  cameraConfig.pin_sscb_scl = SIOC_GPIO_NUM;
+  cameraConfig.pin_pwdn = PWDN_GPIO_NUM;
+  cameraConfig.pin_reset = RESET_GPIO_NUM;
+  cameraConfig.xclk_freq_hz = 20000000;
+  cameraConfig.frame_size = FRAMESIZE_UXGA;
+  //cameraConfig.pixel_format = PIXFORMAT_JPEG; // for streaming
+  cameraConfig.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
+  cameraConfig.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+  cameraConfig.fb_location = CAMERA_FB_IN_PSRAM;
+  cameraConfig.jpeg_quality = 12;
+  cameraConfig.fb_count = 1;
   
   // if PSRAM IC present, init with UXGA resolution and higher JPEG quality
   //                      for larger pre-allocated frame buffer.
-  if(config.pixel_format == PIXFORMAT_JPEG){
+  if(cameraConfig.pixel_format == PIXFORMAT_JPEG){
     if(psramFound()){
-      config.jpeg_quality = 10;
-      config.fb_count = 2;
-      config.grab_mode = CAMERA_GRAB_LATEST;
+      cameraConfig.jpeg_quality = 10;
+      cameraConfig.fb_count = 2;
+      cameraConfig.grab_mode = CAMERA_GRAB_LATEST;
     } else {
       // Limit the frame size when PSRAM is not available
-      config.frame_size = FRAMESIZE_SVGA;
-      config.fb_location = CAMERA_FB_IN_DRAM;
+      cameraConfig.frame_size = FRAMESIZE_SVGA;
+      cameraConfig.fb_location = CAMERA_FB_IN_DRAM;
     }
   } else {
     // Best option for face detection/recognition
-    config.frame_size = FRAMESIZE_240X240;
-#if CONFIG_IDF_TARGET_ESP32S3
-    config.fb_count = 2;
-#endif
+    cameraConfig.frame_size = FRAMESIZE_240X240;
   }
 
-#if defined(CAMERA_MODEL_ESP_EYE)
-  pinMode(13, INPUT_PULLUP);
-  pinMode(14, INPUT_PULLUP);
-#endif
-
   // camera init
-  esp_err_t err = esp_camera_init(&config);
+  esp_err_t err = esp_camera_init(&cameraConfig);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
@@ -155,26 +180,10 @@ void setup() {
     s->set_saturation(s, -2); // lower the saturation
   }
   // drop down frame size for higher initial frame rate
-  if(config.pixel_format == PIXFORMAT_JPEG){
+  if(cameraConfig.pixel_format == PIXFORMAT_JPEG){
     s->set_framesize(s, FRAMESIZE_QVGA);
   }
 
-#if defined(CAMERA_MODEL_M5STACK_WIDE) || defined(CAMERA_MODEL_M5STACK_ESP32CAM)
-  s->set_vflip(s, 1);
-  s->set_hmirror(s, 1);
-#endif
-
-#if defined(CAMERA_MODEL_ESP32S3_EYE)
-  s->set_vflip(s, 1);
-#endif
-
-
-  
-//  read ssid from memmory  
-  ssid = EEPROM.readString(0);
-  pass = EEPROM.readString(64);
-
-//  WiFi.begin(ssid.c_str(),pass.c_str());
 WiFi.softAP("test");
 IPAddress myIP = WiFi.softAPIP();
   startCameraServer();
@@ -185,25 +194,28 @@ IPAddress myIP = WiFi.softAPIP();
   Serial.println("' to connect");
 }
 
+void swapFormats(pixformat_t pixfmt){
+  if(pixfmt != PIXFORMAT_JPEG){
+    cameraConfig.pixel_format=PIXFORMAT_JPEG;
+    cameraConfig.jpeg_quality = 10;
+    cameraConfig.fb_count = 2;
+    cameraConfig.grab_mode = CAMERA_GRAB_LATEST;
+    cameraConfig.frame_size = FRAMESIZE_UXGA;
+  } else {
+    // Best option for face detection/recognition
+    cameraConfig.pixel_format=PIXFORMAT_RGB565;
+    cameraConfig.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+    cameraConfig.frame_size = FRAMESIZE_240X240;
+    cameraConfig.fb_count = 1;
+    
+  }
+
+
+}
 void loop() {
   // Do nothing. Everything is done in another task by the web server
   delay(10000);
 }
-
-// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 typedef struct
 {
     httpd_req_t *req;
@@ -234,50 +246,70 @@ void enable_led(bool en)
 }
 #endif
 
-#define THRESH 20
 
-/*
+
+void draw_box(fb_data_t *fbd,int x,int y,int w,int h,uint32_t color){
+
+  if(fbd->bytes_per_pixel == 2){
+      //color = ((color >> 8) & 0xF800) | ((color >> 3) & 0x07E0) | (color & 0x001F);
+      color = ((color >> 16) & 0x001F) | ((color >> 3) & 0x07E0) | ((color << 8) & 0xF800);
+  }
+  fb_gfx_drawFastHLine(fbd, x, y, w, color);
+  fb_gfx_drawFastHLine(fbd, x, y + h - 1, w, color);
+  fb_gfx_drawFastVLine(fbd, x, y, h, color);
+  fb_gfx_drawFastVLine(fbd, x + w - 1, y, h, color);
+
+}
+
+/*BROKEN*/
+#define THRESH 64
 void motion_detect(camera_fb_t *fb ){
-    static uint8_t *lastrgb565 = (uint8_t*)malloc(fb->width*fb->height*2);
-    uint8_t *rgb565=(uint8_t*)malloc(fb->width*fb->height*2);
+    static uint8_t lastrgb565[24][24];
     bool motion=false;
+    fb_data_t rfb;
+    rfb.width = fb->width;
+    rfb.height = fb->height;
+    rfb.data = fb->buf;
+    rfb.bytes_per_pixel = 2;
+    rfb.format = FB_RGB565;
 
-    jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE);
+    int rectx0=fb->width,recty0 =fb->height,rectx1=0,recty1=0;
 
-    if(lastrgb565!=NULL){
-      for(int x=0;x < fb->width;x++){
-          for(int y=0;y < fb->height;y++){
-            uint16_t *rgb1=(uint16_t*)rgb565;
-            uint16_t *rgb2=(uint16_t*)lastrgb565;
-    //          int i= y * (fb1->width * 3) + x * 3;
-            uint8_t g1=(rgb1[x*y] >> 5) & 0b0000000000111111;
-            uint8_t g2=(rgb2[x*y] >> 5) & 0b0000000000111111;
-            uint8_t pixel=abs(g1-g2);
-  //            fb1->buf[x*y]=0b0000011111100000;
+//this works for detecting  motion but the bounding box is wrong 
+  for(int y=0,yy=0;y < fb->height;yy++,y+=10){
+    for(int x=0,xx=0;x < fb->width;xx++,x+=10){
+//     for(uint32_t i=0,ii=0;i<(fb->width*fb->height*2);ii++,i+=20){
+//      uint16_t i= y * (fb->width * 2) + x * 2;
+//      uint16_t ii= yy * (fb->width/10) + xx;
+      
 
-           //Math.abs(imagedata.data[x]-lastimagedata.data[x]);
-  //            fb1->buf[i+1]=pixel>thresh?pixel:0;
-  //            fb1->buf[i+2]=0;//Math.abs(imagedata.data[x+2]-lastimagedata.data[x+2]);
-  //            fb1->buf[i+3]=255;//Math.abs(imagedata.data[x+3]-lastimagedata.data[x+3]);
+      uint8_t r1=fb->buf[y*x*2] & 0b11111;//check red only
+      uint8_t r2=lastrgb565[yy][xx] & 0b11111;
+      uint8_t diff=abs(r1-r2);
+     
+      lastrgb565[yy][xx]=fb->buf[y*x*2];//set last pixel
 
-            if(pixel>THRESH){
-//             fb->buf[x*y*2]=0b00000111;
-//             fb->buf[x*y*2+1]=0b11100000;
-//              fb_gfx_fillRect(fb->buf,x,y,1,1,0x0000FF00);
-              motion=true;
-            }
 
-          }
+//      draw_box(&rfb,x,y,1,1,0x0000ff);              
+
+      if(diff>THRESH){
+        motion=true;
+        if(rectx0>x)rectx0=x;
+        if(rectx1<x)rectx1=x;
+        if(recty0>y)recty0=y;
+        if(recty1<y)recty1=y;
       }
 
+    }
   }
 
-    memcpy(lastrgb565, rgb565, sizeof(rgb565));
-    free(rgb565);
-    if(motion==true)ESP_LOGE(TAG, "Motion detected");
- }
-*/
+  if(motion==true){
+//      ESP_LOGE(TAG, "Motion detected %d %d %d %d",rectx0,recty0,rectx1,recty1);
+    draw_box(&rfb,rectx0,recty0,rectx1-rectx0,recty1-recty0,0x00ff00);              
+  }      
+}
 
+#define MOTION_DETECT 1
 
 static esp_err_t stream_handler(httpd_req_t *req)
 {
@@ -287,12 +319,6 @@ static esp_err_t stream_handler(httpd_req_t *req)
     size_t _jpg_buf_len = 0;
     uint8_t *_jpg_buf = NULL;
     char *part_buf[128];
-
-    static int64_t last_frame = 0;
-    if (!last_frame)
-    {
-        last_frame = esp_timer_get_time();
-    }
 
     res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
     if (res != ESP_OK)
@@ -316,28 +342,30 @@ static esp_err_t stream_handler(httpd_req_t *req)
         fb = esp_camera_fb_get();
         if (!fb)
         {
-            ESP_LOGE(TAG, "Camera capture failed");
+            log_e("Camera capture failed");
             res = ESP_FAIL;
         }
         else
         {
-//motion detection
-//          if(lastfb!=NULL)
-
-//          motiondetect(fb,lastfb);
-//          memcpy(lastfb, fb,sizeof(fb));
-
-            _timestamp.tv_sec = fb->timestamp.tv_sec;
-            _timestamp.tv_usec = fb->timestamp.tv_usec;
-            if (fb->format == PIXFORMAT_JPEG)
-            {
-                _jpg_buf_len = fb->len;
-                _jpg_buf = fb->buf;
-                //fmt2rgb888(fb->buf, fb->len, fb->format, rgb888);
-               // esp_camera_fb_return(fb);
-//                motion_detect(fb);
-//               free(rgb565);
-             }
+                if (fb->format != PIXFORMAT_JPEG)
+                {
+                    if(MOTION_DETECT){
+                      motion_detect(fb);
+                    }                    
+                    bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+                    esp_camera_fb_return(fb);
+                    fb = NULL;
+                    if (!jpeg_converted)
+                    {
+                        log_e("JPEG compression failed");
+                        res = ESP_FAIL;
+                    }
+                }
+                else
+                {
+                    _jpg_buf_len = fb->len;
+                    _jpg_buf = fb->buf;
+                }
         }
         if (res == ESP_OK)
         {
@@ -365,14 +393,14 @@ static esp_err_t stream_handler(httpd_req_t *req)
         }
         if (res != ESP_OK)
         {
-            ESP_LOGE(TAG, "send frame failed failed");
+            log_e( "send frame failed failed");
             break;
         }
         int64_t fr_end = esp_timer_get_time();
 
 
-        int64_t frame_time = fr_end - last_frame;
-        frame_time /= 1000;
+//        int64_t frame_time = fr_end - last_frame;
+//        frame_time /= 1000;
     }
 
 #ifdef CONFIG_LED_ILLUMINATOR_ENABLED
@@ -383,48 +411,6 @@ static esp_err_t stream_handler(httpd_req_t *req)
     return res;
 }
 
-const char HTML[]="<!doctype html>\n\
-<html>\n\
-    <head>\n\
-        <meta charset='utf-8'>\n\
-        <meta name='viewport' content='width=device-width,initial-scale=1'>\n\
-        <title>ESP32 OV2460</title>\n\
-    </head>\n\
-    <body>\n\
-<img id='stream' src='' crossorigin>\n\
-<button id='toggle-stream'>Start Stream</button>\n\
-        <script>\n\
-  var baseHost = document.location.origin\n\
-  var streamUrl = baseHost + ':81'\n\
-\n\
-  document.addEventListener('DOMContentLoaded', function (event) {\n\
-\n\
-  const view = document.getElementById('stream')\n\
-  const streamButton = document.getElementById('toggle-stream')\n\
-const stopStream = () => {\n\
-    window.stop();\n\
-    streamButton.innerHTML = 'Start Stream'\n\
-  }\n\
-\n\
-  const startStream = () => {\n\
-    view.src = `${streamUrl}/stream`\n\
-//    show(viewContainer)\n\
-    streamButton.innerHTML = 'Stop Stream'\n\
-  }\n\
-    streamButton.onclick = () => {\n\
-    const streamEnabled = streamButton.innerHTML === 'Stop Stream'\n\
-    if (streamEnabled) {\n\
-      stopStream()\n\
-    } else {\n\
-      startStream()\n\
-    }\n\
-  }\n\
-\n\
-});\n\
-        </script>\n\
-    </body>\n\
-</html>\n\
-";
 
 
 
@@ -432,13 +418,13 @@ static esp_err_t index_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_set_hdr(req, "Content-Encoding", "html");
-    return httpd_resp_send(req, HTML, sizeof(HTML));
+    return httpd_resp_send(req, HTML.c_str(), HTML.length());
 }
 
-void startCameraServer()
+void startCameraServer(void)
 {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 16;
+    httpd_config_t httpConfig = HTTPD_DEFAULT_CONFIG();
+    httpConfig.max_uri_handlers = 16;
 
     httpd_uri_t index_uri = {
         .uri = "/",
@@ -459,16 +445,16 @@ void startCameraServer()
         .supported_subprotocol = NULL
     };
 //    ra_filter_init(&ra_filter, 20);
-    ESP_LOGI(TAG, "Starting web server on port: '%d'", config.server_port);
-    if (httpd_start(&camera_httpd, &config) == ESP_OK)
+    ESP_LOGI(TAG, "Starting web server on port: '%d'", httpConfig.server_port);
+    if (httpd_start(&camera_httpd, &httpConfig) == ESP_OK)
     {
         httpd_register_uri_handler(camera_httpd, &index_uri);
     }
 
-    config.server_port += 1;
-    config.ctrl_port += 1;
-    ESP_LOGI(TAG, "Starting stream server on port: '%d'", config.server_port);
-    if (httpd_start(&stream_httpd, &config) == ESP_OK)
+    httpConfig.server_port += 1;
+    httpConfig.ctrl_port += 1;
+    ESP_LOGI(TAG, "Starting stream server on port: '%d'", httpConfig.server_port);
+    if (httpd_start(&stream_httpd, &httpConfig) == ESP_OK)
     {
         httpd_register_uri_handler(stream_httpd, &stream_uri);
     }
