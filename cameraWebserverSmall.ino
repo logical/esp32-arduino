@@ -76,15 +76,17 @@ String pass;
         <title>ESP32 OV2460</title>
     </head>
     <body>
+<img id="motion" src="document.location.origin +:81" crossorigin>
 <img id="stream" src="" crossorigin>
 <button id="toggle-stream">Start Stream</button>
         <script>
 document.addEventListener('DOMContentLoaded', function (event) {
-  var baseHost = document.location.origin
-  var streamUrl = baseHost + ':81'
+  var baseHost = document.location.origin;
+  var streamUrl = baseHost + ':81';
+  const view = document.getElementById('stream');
+  const mview = document.getElementById('motion');
+  mview.src = `${streamUrl}/stream`;
 
-
-  const view = document.getElementById('stream')
   const streamButton = document.getElementById('toggle-stream')
 const stopStream = () => {
     window.stop();
@@ -92,16 +94,16 @@ const stopStream = () => {
   }
 
   const startStream = () => {
-    view.src = `${streamUrl}/stream`
+    view.src = `${streamUrl}/stream`;
 //    show(viewContainer)
-    streamButton.innerHTML = 'Stop Stream'
+    streamButton.innerHTML = 'Start Motion';
   }
     streamButton.onclick = () => {
-    const streamEnabled = streamButton.innerHTML === 'Stop Stream'
+    const streamEnabled = streamButton.innerHTML === 'Start Motion'
     if (streamEnabled) {
-      stopStream()
+      stopStream();
     } else {
-      startStream()
+      startStream();
     }
   }
 
@@ -199,7 +201,7 @@ void swapFormats(pixformat_t pixfmt){
   if(pixfmt == PIXFORMAT_JPEG){
     s->set_pixformat(s,PIXFORMAT_JPEG);
     s->set_quality(s,10);
-    s->set_framesize (s,FRAMESIZE_UXGA);
+    s->set_framesize(s, FRAMESIZE_QVGA);
   } else {
     // Best option for face detection/recognition
     s->set_pixformat(s,PIXFORMAT_RGB565);
@@ -258,9 +260,10 @@ void draw_box(fb_data_t *fbd,int x,int y,int w,int h,uint32_t color){
 
 /*BROKEN*/
 #define THRESH 64
-void motion_detect(camera_fb_t *fb ){
+bool motion_detect(camera_fb_t *fb ){
     static uint8_t lastrgb565[24][24];
     bool motion=false;
+
     fb_data_t rfb;
     rfb.width = fb->width;
     rfb.height = fb->height;
@@ -270,25 +273,20 @@ void motion_detect(camera_fb_t *fb ){
 
     int rectx0=fb->width,recty0 =fb->height,rectx1=0,recty1=0;
 
-//this works for detecting  motion but the bounding box is wrong 
-  for(int y=0,yy=0;y < fb->height;yy++,y+=10){
-    for(int x=0,xx=0;x < fb->width;xx++,x+=10){
-//     for(uint32_t i=0,ii=0;i<(fb->width*fb->height*2);ii++,i+=20){
-//      uint16_t i= y * (fb->width * 2) + x * 2;
-//      uint16_t ii= yy * (fb->width/10) + xx;
-      
-
-      uint8_t r1=fb->buf[y*x*2] & 0b11111000;//check red only
-      uint8_t r2=lastrgb565[yy][xx] & 0b11111000;
+  for(int y=0,yy=0;y < fb->height-10;yy++,y+=10){
+    for(int x=0,xx=0;x < fb->width-10;xx++,x+=10){
+      uint32_t i= (y * (fb->width * 2)) + (x * 2);
+//      Serial.println(i);
+//      uint8_t r1=fb->buf[x*y*2] & 0b11111000;//check red only
+      uint8_t r1=fb->buf[i] & 0b11111000;//check red only
+      uint8_t r2=lastrgb565[xx][yy] & 0b11111000;
       uint8_t diff=abs(r1-r2);
      
-      lastrgb565[yy][xx]=fb->buf[y*x*2];//set last pixel
-
-
-//      draw_box(&rfb,x,y,1,1,0x0000ff);              
+      lastrgb565[xx][yy]=fb->buf[i];//set last pixel
 
       if(diff>THRESH){
         motion=true;
+//        return motion;
         if(rectx0>x)rectx0=x;
         if(rectx1<x)rectx1=x;
         if(recty0>y)recty0=y;
@@ -299,17 +297,23 @@ void motion_detect(camera_fb_t *fb ){
   }
 
   if(motion==true){
-//      ESP_LOGE(TAG, "Motion detected %d %d %d %d",rectx0,recty0,rectx1,recty1);
+//     Serial.printf("Motion detected %d %d %d %d",rectx0,recty0,rectx1,recty1);
     draw_box(&rfb,rectx0,recty0,rectx1-rectx0,recty1-recty0,0x00ff00);              
 //    enable_led(1);
 
   }      
+  return motion;
+}
+bool MotionDetector=false;
+
+static esp_err_t motion_handler(httpd_req_t *req){
+ // MotionDetector=TRUE;
+  stream_handler(req);
 }
 
-#define MOTION_DETECT 1
 
-static esp_err_t stream_handler(httpd_req_t *req)
-{
+
+static esp_err_t stream_handler(httpd_req_t *req){
     camera_fb_t *fb = NULL;
     struct timeval _timestamp;
     esp_err_t res = ESP_OK;
@@ -326,15 +330,10 @@ static esp_err_t stream_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_set_hdr(req, "X-Framerate", "60");
 
-#ifdef CONFIG_LED_ILLUMINATOR_ENABLED
-    enable_led(true);
-    isStreaming = true;
-#endif
-
-//    lastfb = esp_camera_fb_get();
 
     while (true)
     {
+
 
         fb = esp_camera_fb_get();
         if (!fb)
@@ -344,25 +343,23 @@ static esp_err_t stream_handler(httpd_req_t *req)
         }
         else
         {
-                if (fb->format != PIXFORMAT_JPEG)
+            if (fb->format != PIXFORMAT_JPEG)
+            {
+                if(motion_detect(fb));
+                bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+                esp_camera_fb_return(fb);
+                fb = NULL;
+                if (!jpeg_converted)
                 {
-                    if(MOTION_DETECT){
-                      motion_detect(fb);
-                    }                    
-                    bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-                    esp_camera_fb_return(fb);
-                    fb = NULL;
-                    if (!jpeg_converted)
-                    {
-                        log_e("JPEG compression failed");
-                        res = ESP_FAIL;
-                    }
+                    log_e("JPEG compression failed");
+                    res = ESP_FAIL;
                 }
-                else
-                {
-                    _jpg_buf_len = fb->len;
-                    _jpg_buf = fb->buf;
-                }
+            }
+            else
+            {
+                _jpg_buf_len = fb->len;
+                _jpg_buf = fb->buf;
+            }
         }
         if (res == ESP_OK)
         {
@@ -399,12 +396,6 @@ static esp_err_t stream_handler(httpd_req_t *req)
 //        int64_t frame_time = fr_end - last_frame;
 //        frame_time /= 1000;
     }
-
-#ifdef CONFIG_LED_ILLUMINATOR_ENABLED
-    isStreaming = false;
-    enable_led(false);
-#endif
-
     return res;
 }
 
@@ -441,6 +432,15 @@ void startCameraServer(void)
         .handle_ws_control_frames = false,
         .supported_subprotocol = NULL
     };
+    httpd_uri_t motion_uri = {
+        .uri = "/motion",
+        .method = HTTP_GET,
+        .handler = motion_handler,
+        .user_ctx = NULL,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+    };
 //    ra_filter_init(&ra_filter, 20);
     ESP_LOGI(TAG, "Starting web server on port: '%d'", httpConfig.server_port);
     if (httpd_start(&camera_httpd, &httpConfig) == ESP_OK)
@@ -454,6 +454,6 @@ void startCameraServer(void)
     if (httpd_start(&stream_httpd, &httpConfig) == ESP_OK)
     {
         httpd_register_uri_handler(stream_httpd, &stream_uri);
+        httpd_register_uri_handler(stream_httpd, &motion_uri);
     }
 }
-
