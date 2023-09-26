@@ -41,6 +41,6 @@ My simple example of audio using the dac.
 
 A stripped down version of the esp32cam example file for ai-thinker only
 
-### serialLogin.ino
+### serialWifiLogin.ino
 
 get the ssid and password from serial and save them to eeprom.
