@@ -5,7 +5,6 @@ join the access point then go to 192.168,4,1
 #include <WiFiAP.h>
 
 #include <esp_http_server.h>
-#include <driver/i2s.h>
 
  String HTML = R"***(
 <html>
