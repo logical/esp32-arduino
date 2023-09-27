@@ -44,3 +44,9 @@ A stripped down version of the esp32cam example file for ai-thinker only
 ### serialWifiLogin.ino
 
 get the ssid and password from serial and save them to eeprom.
+
+### encoderMenu.ino
+
+This is an example menu using a rotary encoder and a 1306 lcd.
+
+###
