@@ -1,13 +1,10 @@
 #include "SSD1306Wire.h"        // legacy: #include "SSD1306.h"
 
-
-
 //rotary encoder
 
 #define CLK 19
 #define DT 18
 #define SW 5
-
 
 
 SSD1306Wire display(0x3c,SDA,SCL);   // ADDRESS, SDA, SCL  -  SDA and SCL usually populate automatically based on your board's pins_arduino.h e.g. https://github.com/esp8266/Arduino/blob/master/variants/nodemcu/pins_arduino.h
@@ -22,32 +19,31 @@ display.display();
 // Serial.println(c);
 }
 
+
 /////////////////////////////////////////////
 // THE FUNCTIONS CALLED FROM THE MENU
 ////////////////////////////////////////////
-int32_t frequencytest;
-int32_t tracktest;
+float frequency=0;
+float track=1;
 
-void freqUp(int32_t* v){
+void freqUp(float* v){
   if(*v<255)*v+=1;
   else *v=0;
 }
-void freqDown(int32_t* v){
+void freqDown(float* v){
   if(*v>0)*v-=1;
   else *v = 255;
 }
 
-void trackUp(int32_t *v){
+void trackUp(float *v){
   if(*v<255)*v+=10;
   else *v=0;
 }
 
-void trackDown(int32_t *v){
+void trackDown(float *v){
   if(*v>0)*v-=10;
   else *v=255;
 }
-
-
 
 ////////////////////////////////////////////////////////////
 //   MENU BEGINS
@@ -58,9 +54,9 @@ void trackDown(int32_t *v){
 struct lcdMenuItem{
     bool active=false;
     const char *label;
-    int32_t *value;
-    void (*downFunc)(int32_t*)=NULL;
-    void (*upFunc)(int32_t*)=NULL;
+    float *value;
+    void (*downFunc)(float*)=NULL;
+    void (*upFunc)(float*)=NULL;
 };
 ////////////////////////////////////
 // ROOT OF MENU
@@ -71,7 +67,7 @@ class lcdMenu{
     int len=0;
     int select=0;
     void (*displayFunc)(uint16_t, uint16_t,String)=NULL;
-    bool updateMenu=true;
+    bool updateMenu=true,lcdUpSelected=false,lcdDownSelected=false;
     lcdMenuItem *menu[16];
 
     lcdMenu(void (*displaytextfunction)(uint16_t, uint16_t,String)){
@@ -90,6 +86,7 @@ class lcdMenu{
         if(menu[i]->active)displayFunc(100,y,String(*menu[i]->value)); 
         y+=20;
       }
+      updateMenu=false;
     }
     void serialDisplay(){
       
@@ -109,7 +106,7 @@ class lcdMenu{
       Serial.println("\n\n");
       updateMenu=false;
     }
-    void lcdAddMenu(const char *t,void (*up)(int32_t*),void (*down)(int32_t*),int32_t *v){
+    void lcdAddMenu(const char *t,void (*up)(float*),void (*down)(float*),float *v){
       menu[len]=new lcdMenuItem;
       menu[len]->label=t;
       menu[len]->upFunc=up;
@@ -124,6 +121,7 @@ class lcdMenu{
         else select=0;
        }
       updateMenu=true;
+      lcdUpSelected=false;
     }
     void lcdDown(){
        if(menu[select]->active==true)menu[select]->downFunc(menu[select]->value);
@@ -132,6 +130,7 @@ class lcdMenu{
         else select=len-1;
        } 
       updateMenu=true;
+      lcdDownSelected=false;
     }
     void lcdSelect(){
       if(menu[select]->active)menu[select]->active=false;
@@ -160,11 +159,9 @@ lcdMenu mainMenu(displayMenuItem);
 
 	if (currentStateCLK != lastStateCLK  && currentStateCLK == 1){
 		if (digitalRead(DT) != currentStateCLK) {
-//			counter --;
-    mainMenu.lcdUp();
+    mainMenu.lcdUpSelected=true;
 		} else {
-//			counter ++;
-    mainMenu.lcdDown();
+    mainMenu.lcdDownSelected=true;
 		}
 	}
 	lastStateCLK = currentStateCLK;
@@ -176,16 +173,16 @@ void IRAM_ATTR switchPress(){
 }
 
 void setup() {
-frequencytest=0;
- tracktest=0;
+frequency=0;
+ track=0;
 
   Serial.begin(115200);
 
 ///////////////////////////////////
 //  ADD MENUITEMS TO MENU
 ////////////////////////////////////
-  mainMenu.lcdAddMenu("frequency",freqUp,freqDown,&frequencytest);
-  mainMenu.lcdAddMenu("track",trackUp,trackDown,&tracktest);
+  mainMenu.lcdAddMenu("frequency",freqUp,freqDown,&frequency);
+  mainMenu.lcdAddMenu("track",trackUp,trackDown,&track);
 
 //////////////////////////////////////
 //  ROTARY ENCODER
@@ -209,10 +206,8 @@ frequencytest=0;
 
 void loop() {
   
-  if(mainMenu.updateMenu){
-    mainMenu.serialDisplay();//this is only for debugging
-    mainMenu.lcdDisplay();
-  }
-  delay(100);
-
+  if(mainMenu.updateMenu)mainMenu.lcdDisplay();
+  if(mainMenu.lcdUpSelected)mainMenu.lcdUp();
+  else if(mainMenu.lcdDownSelected)mainMenu.lcdDown();
+  delay(10);
 }
