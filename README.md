@@ -47,7 +47,7 @@ get the ssid and password from serial and save them to eeprom.
 
 ### FMTX library
 
-Modified copyrighted code from elechouse for esp32.
+Modified copyrighted code from elechouse kt0803 fm transmitter for esp32.
 
 ### encoderMenu.ino
 
