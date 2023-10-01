@@ -47,7 +47,7 @@ get the ssid and password from serial and save them to eeprom.
 
 ### FMTX library
 
-Modified copywrited code from elechouse for esp32.
+Modified copyrighted code from elechouse for esp32.
 
 ### encoderMenu.ino
 
