@@ -45,6 +45,10 @@ A stripped down version of the esp32cam example file for ai-thinker only
 
 get the ssid and password from serial and save them to eeprom.
 
+### FMTX library
+
+Modified copywrited code from elechouse for esp32.
+
 ### encoderMenu.ino
 
 This is an example menu using a rotary encoder and a 1306 lcd.
