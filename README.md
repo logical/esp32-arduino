@@ -53,4 +53,6 @@ Modified copyrighted code from elechouse kt0803 fm transmitter for esp32.
 
 This is an example menu using a rotary encoder and a 1306 lcd.
 
-###
+### serverSD.ino
+
+serve web pages from an sd card.flat directory only with png and jpg images.
