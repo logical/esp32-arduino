@@ -1,6 +1,8 @@
 # esp32-arduino
 
 My projects for esp32.
+disclaimer:
+When I say projects I mean experiments. some of them don't really work ,yet.
 
 ### fsk_mod_demod 
 
