@@ -32,10 +32,10 @@ intvl = 1/Fs;
 secs = 1/freq2;
 tim = 0 : intvl : secs-intvl;
 
-wavehisin = sin(tim*2*pi*freq1)*;
-wavehicos = cos(tim *2*pi*freq1)*;
-wavelosin = sin(tim*2*pi*freq2)*;
-wavelocos = cos(tim *2*pi*freq2)*;
+wavehisin = sin(tim*2*pi*freq1);
+wavehicos = cos(tim *2*pi*freq1);
+wavelosin = sin(tim*2*pi*freq2);
+wavelocos = cos(tim *2*pi*freq2);
 
 disp(wavehisin);
 disp(wavehicos);
