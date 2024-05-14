@@ -22,6 +22,28 @@ use minimodem to test.
 
 minimodem --tx --ascii  --mark 1200 --space 2200 --startbits 1 --stopbits 2  1200
 
+#### GETTING THE FILTER COEFFIENTS USING GNU OCTAVE
+
+```
+Fs = 19200;
+freq1 = 2200;
+freq2 = 1200;
+intvl = 1/Fs;
+secs = 1/freq2;
+tim = 0 : intvl : secs-intvl;
+
+wavehisin = sin(tim*2*pi*freq1)*;
+wavehicos = cos(tim *2*pi*freq1)*;
+wavelosin = sin(tim*2*pi*freq2)*;
+wavelocos = cos(tim *2*pi*freq2)*;
+
+disp(wavehisin);
+disp(wavehicos);
+disp(wavelosin);
+disp(wavelocos);
+```
+
+
 
 I think that ADC 1 is not affected by wifi only ADC 2 so I will only use ADC 1, so I can add wifi.
 DAC or ADC can be controlled by I2S0 only so you can't add both on I2S. I have not tested with wifi.
