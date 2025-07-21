@@ -1,0 +1,424 @@
+/**
+   The MIT License (MIT)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+*/
+
+
+// Include the correct display library
+// For a connection via I2C using Wire include
+//#include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
+#include <Arduino.h>
+#include <BleGamepad.h>
+
+#include <EEPROM.h>
+#include <math.h>
+#include <SSD1306Wire.h>
+ 
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define JOYRX   35
+#define JOYRY   34
+#define JOYLX   33
+#define JOYLY   32
+#define JOYRS   14
+#define JOYLS   13
+#define SET_PIN 27
+#define TX_PIN  17
+#define RX_PIN  16
+#define LED_BUILTIN 2
+
+
+#define A2D_MAX 4095
+#define MIN_UP A2D_MAX-10 //up value
+#define MIN_DN 10   //down value
+#define MIN_CHANGE 40 //minimum joystick position change
+#define DEBOUNCE 300  //debounce time for switches
+#define TOTAL_COMMANDS 3
+
+
+
+BleGamepad bleGamepad;
+
+enum
+{
+  SETTINGS=0,
+  CONTROL=1,
+  INFO=2,
+  TELEM=3,
+}mode,lastmode;
+
+// Initialize the OLED display using Wire library
+SSD1306Wire display(0x3c, SDA_PIN, SCL_PIN);   // ADDRESS, SDA, SCL  -  SDA and SCL usually populate automatically based on your board's pins_arduino.h e.g. https://github.com/esp8266/Arduino/blob/master/variants/nodemcu/pins_arduino.h
+
+
+const static uint8_t BLE_CONTROL =1;
+
+//,//channels
+//"P1","P4","P8",
+//"B1200","B9600","B57600"//baud rate changes need a uart restart
+//};
+int8_t currentcommand;
+char textout[256];
+
+struct menuItem{
+  char *label;
+  void (*action)(int&, int);
+  int setting;
+}menu[3];
+
+void drawmenu(){
+  display.cls();
+  display.write(menu[currentcommand].label);
+  display.write("   ");
+  itoa(menu[currentcommand].setting,textout,10);
+  display.write(textout);
+  display.write('\n');
+}
+
+const char modes[TELEM][10]{"control","info","telemetry"};
+void domode(int &s,int x){
+  if(x==-1){
+    display.write(modes[s-1]);
+    display.write(" mode");
+    display.write("\n");
+
+    switch(s){
+      case 1:
+        mode=CONTROL;
+        return;
+      case 2:
+        mode=INFO;
+        return;
+      case 3:
+        mode=TELEM;
+        return;
+
+    };
+  }
+  if(x==0 && s<TELEM){
+    s++;
+    return;
+  }
+  if(x==1 && s>1)s--;
+
+}
+
+
+#define POW_COMMANDS 8
+const char powers[POW_COMMANDS][4]={ "+P1","+P2","+P3","+P4","+P5","+P6","+P7","+P8"};
+void dopower(int &s,int x){
+
+  if(x==-1){
+    display.write("power ");
+    display.write(powers[s]);
+    display.write("\n");
+    sethc12(powers[s]);
+    return;
+  }
+  if(x==0 && s<POW_COMMANDS){
+    s++;
+    return;
+  }
+  if(x==1) if(s>0)s--;
+}
+
+#define CHAN_COMMANDS 11
+const char channels[CHAN_COMMANDS][8]={ "+C001","+C010","+C020","+C030","+C040","+C050","+C060","+C070","+C080","+C090","+C100"};
+void dochannel(int &s,int x){
+  if(x==-1){
+    display.write("channel ");
+    display.write(channels[s]);
+    display.write("\n");
+    sethc12(channels[s]);
+    return;
+  }
+  if(x==0 && s<CHAN_COMMANDS){
+    s++;
+    return;
+  }
+  if(x==1) if(s>0)s--;
+
+
+}
+
+void initmenu(void){
+  menu[0].label="channel";
+  menu[0].action=dochannel;
+  menu[0].setting=0;
+  menu[1].label="power";
+  menu[1].action=dopower;
+  menu[1].setting=8;
+  menu[2].label="mode";
+  menu[2].action=domode;
+  menu[2].setting=1;
+
+}
+
+
+void drawtelem(void){
+  if(Serial2.available()){
+    Serial2.readBytesUntil('\n',textout,256);
+    display.write(textout);
+  }
+}
+
+
+void sethc12(const char *s){
+  digitalWrite(SET_PIN,0);
+  delay(100);
+  Serial2.print("AT");
+  Serial2.println(s);
+//  Serial2.print("\n");
+  delay(500);
+  while(!Serial2.available());//wait for reply
+  drawtelem();
+  digitalWrite(SET_PIN,1); 
+  delay(1000);
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial2.begin(9600,SERIAL_8N1,RX_PIN,TX_PIN);//default hc12 baud rate
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);  // turn the LED on (HIGH is the voltage level)
+
+  pinMode(SET_PIN, OUTPUT);
+  pinMode(JOYRS, INPUT_PULLUP);
+  pinMode(JOYLS, INPUT_PULLUP);
+  digitalWrite(SET_PIN,1);
+  delay(1000);//delay for display to power up
+
+  display.init();
+
+  display.flipScreenVertically();
+
+  display.setContrast(255);
+ // display.setFont(ArialMT_Plain_10);
+ // sethc12("C001");//set channel
+//  sethc12("P8");//set full power
+  display.cls();
+  initmenu();
+  currentcommand=0;
+  mode=CONTROL;
+
+  if(BLE_CONTROL){
+    bleGamepad.begin();
+  //  return;
+  } 
+  sethc12("AT");
+
+
+}
+uint16_t lastrx,lastry,lastlx,lastly;
+uint8_t lastrs,lastls,lastbuttons;
+
+void sendcontrol(uint16_t rx,uint16_t ry,uint16_t lx,uint16_t ly,uint8_t b){
+if(BLE_CONTROL){
+  if (bleGamepad.isConnected())
+  {
+    #define CONTROL_MAX 32767
+    const uint16_t control_center = CONTROL_MAX/2;
+    int16_t chanval[4];
+    //left first then right
+    chanval[0]=(float)lx/A2D_MAX*CONTROL_MAX;
+    chanval[1]=(float)ly/A2D_MAX*CONTROL_MAX;
+    chanval[2]=(float)rx/A2D_MAX*CONTROL_MAX;
+    chanval[3]=(float)ry/A2D_MAX*CONTROL_MAX;
+    bleGamepad.setAxes(chanval[0], chanval[1], control_center,control_center, chanval[2], chanval[3],  control_center, control_center);
+    if(b & 0b00000001 ){
+      if(!bleGamepad.isPressed(BUTTON_1))bleGamepad.press(BUTTON_1);
+    }
+    else{
+      if(bleGamepad.isPressed(BUTTON_1))bleGamepad.release(BUTTON_1);
+    }
+    if(b & 0b00000010){
+      if(!bleGamepad.isPressed(BUTTON_2))bleGamepad.press(BUTTON_2);
+    }
+    else{
+      if(bleGamepad.isPressed(BUTTON_2))bleGamepad.release(BUTTON_2);
+
+    } 
+  }
+//delay(10);
+
+//  return;
+}
+#define SERVOMAX 180
+//receiver expects 9 bytes with 255 start byte
+//there can only be up to 7 buttons because 255 is start
+uint8_t rcchanval[9];
+rcchanval[0]=255;//255 start byte
+rcchanval[1]=(float)lx/A2D_MAX*SERVOMAX;
+rcchanval[2]=(float)ly/A2D_MAX*SERVOMAX;
+rcchanval[3]=(float)rx/A2D_MAX*SERVOMAX;
+rcchanval[4]=(float)ry/A2D_MAX*SERVOMAX;
+rcchanval[5]=90;
+rcchanval[6]=90;
+rcchanval[7]=90;
+rcchanval[8]=b;
+Serial2.write(rcchanval,9);
+//Serial2.flush();
+delay(20);
+}
+
+void drawinfo(uint16_t rx,uint16_t ry,uint16_t lx,uint16_t ly){
+
+  display.cls();
+
+  display.write("LX=");
+  itoa(lx,textout,10);
+  display.write(textout);
+  display.write(" LY=");
+  itoa(ly,textout,10);
+  display.write(textout);
+
+  display.write("\nRX=");
+  itoa(rx,textout,10);
+  display.write(textout);
+  display.write(" RY=");
+  itoa(ry,textout,10);
+  display.write(textout);
+  display.write(" ");//glitch fix
+
+}
+
+void drawscreen(uint16_t rx,uint16_t ry,uint16_t lx,uint16_t ly){
+  display.cls();  
+  #define RECTX 0
+  #define RECTY 0
+  #define RECTW 127
+  #define RECTH 63
+  
+  display.drawRect(RECTX,RECTY,RECTW,RECTH);
+  uint16_t cx=(float)rx/A2D_MAX*RECTW+RECTX;//map(rx,0,A2D_MAX,0,RECTW+RECTX)
+  uint16_t cy=(float)ry/A2D_MAX*RECTH+RECTY;
+  uint16_t tx=(float)lx/A2D_MAX*RECTW+RECTX-2;
+  uint16_t ty=(float)ly/A2D_MAX*RECTH+RECTY-2;
+
+  display.setPixel(cx, cy);
+  display.drawRect(tx,ty,4,4);
+  display.display();
+  
+}
+
+void loop() {
+  uint16_t joyrx = A2D_MAX-((analogRead(JOYRX)+analogRead(JOYRX)+analogRead(JOYRX))/3);
+  uint16_t joyry = (analogRead(JOYRY)+analogRead(JOYRY)+analogRead(JOYRY))/3;
+  uint16_t joylx = A2D_MAX-((analogRead(JOYLX)+analogRead(JOYLX)+analogRead(JOYLX))/3);
+  uint16_t joyly = ((analogRead(JOYLY)+analogRead(JOYLY)+analogRead(JOYLY))/3);
+  bool joyrs = digitalRead(JOYRS);
+  bool joyls = digitalRead(JOYLS);
+  //a binary package for all buttons 
+  uint8_t buttons=0;
+  buttons |= (joyrs<<1) + (joyls);
+
+
+  //mode select
+  if(joyls==0 && lastls==1){
+    delay(DEBOUNCE);
+    if(joyrs==0){//both switches
+      if(mode!=SETTINGS){
+        lastmode=mode;
+        mode=SETTINGS;
+        drawmenu();
+        return;
+      }
+      else{
+        mode=lastmode;
+        drawscreen(joyrx,joyry,joylx,joyly);
+        return;
+      }
+    }    
+  }
+/*
+  if(joyrs==0 && lastrs==1){
+    delay(DEBOUNCE);
+  }
+  */
+  lastls=joyls;
+  lastrs=joyrs;
+  if(mode!=SETTINGS){
+    if(mode!=lastmode || buttons!=lastbuttons || abs(joyrx-lastrx)>MIN_CHANGE ||  abs(joyry-lastry)>MIN_CHANGE || abs(joylx-lastlx)>MIN_CHANGE || abs(joyly-lastly)>MIN_CHANGE){
+      lastmode=mode;
+
+      lastrx=joyrx;
+      lastry=joyry;
+      lastlx=joylx;
+      lastly=joyly;
+      lastbuttons=buttons;
+
+
+      sendcontrol(joyrx,joyry,joylx,joyly,buttons);
+      if(mode==INFO){
+        drawinfo(joyrx,joyry,joylx,joyly);
+        return;
+      }
+      if(mode==CONTROL){
+        drawscreen(joyrx,joyry,joylx,joyly);
+        return;
+      }
+      if(mode==TELEM)drawtelem();
+//     delay(DEBOUNCE);
+    }
+
+  }
+  else{
+    
+    if(joylx>MIN_UP){//up
+      menu[currentcommand].action(menu[currentcommand].setting,0);
+      drawmenu();
+      delay(DEBOUNCE);
+      return;   
+    }
+    if(joylx<MIN_DN){
+      menu[currentcommand].action(menu[currentcommand].setting,1);    
+      drawmenu();
+      delay(DEBOUNCE);
+      return;   
+    }
+    if(joyly>MIN_UP){//up
+      currentcommand++;
+      if(currentcommand>=TOTAL_COMMANDS)currentcommand=0;
+      drawmenu();
+      delay(DEBOUNCE);
+      return;   
+
+    }
+    if(joyly<MIN_DN){//down
+      currentcommand--;
+      if(currentcommand<0)currentcommand=TOTAL_COMMANDS-1;
+      drawmenu();
+      delay(DEBOUNCE);
+      return;   
+
+    }
+
+
+
+    if(joyls==0){//select
+      menu[currentcommand].action(menu[currentcommand].setting,-1);
+      delay(1000);
+    }
+  }
+
+}
+
