@@ -83,3 +83,11 @@ bluetooth speaker.
 ### serverSD.ino
 
 serve web pages from an sd card.flat directory only with png and jpg images.
+
+### controller_esp32  and  wingdrone
+
+These are unfinished. 
+
+controller uses an hc12 to send data to a drone but also bluetooth low energy gamepad to run flight simulation in programs such as CRRCsim.
+
+wingdrone uses an the same hc12 for control but has an mpu6050 for flight control to limit pitch and roll.
