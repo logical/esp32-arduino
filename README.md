@@ -3,6 +3,10 @@
 My projects for esp32.
 disclaimer:
 When I say projects I mean experiments. some of them don't really work ,yet.
+### loader 
+
+this is a bootloader that is for portable devices. it uses an lcd to select bin file from an sd card. it loads and runs the bin file. you have to slightly modify the bin file program to point back to the bootloader or you will be stuck in the program. I'm happy with it for now.
+
 
 ### fsk_mod_demod 
 
