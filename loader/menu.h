@@ -2,8 +2,13 @@
 //   MENU BEGINS
 //  this is for each menu item
 //////////////////////////////////////////////////////////////
-//this uses tft_espi
-
+// this uses tft_espi
+// define your display first then include this header
+// if actFunc is defined then a value is not defined
+// if a value is defined then upFunc and downFunc must be defined to change value
+//////////////////////////////////////////////////////////////////////////////////
+#define tft_espi
+//#define ssd1306
 struct lcdMenuItem{
     bool active=false;
     char label[32];
@@ -28,35 +33,47 @@ class lcdMenu{
       len=0;
       select=0;
      }
+#ifdef tft_espi
+    void displayMenuItem(uint16_t x,uint16_t y, String s,bool sel){
+      img.setTextSize(1);
+      img.setTextColor(TFT_GREEN, TFT_BLACK); // Set text color and background (to overwrite old text)
 
-    void displayMenuItem(uint16_t x,uint16_t y, String s){
+      if(sel)img.setTextColor(TFT_BLACK,TFT_GREEN); // Set text color and background (to overwrite old text)
+
       img.setCursor(x,y);
       img.print(s);
-    //display.display();
-    // Serial.println(c);
     }
+    void displayItemValue(float v){
+      String t=String(v);
+      tft.setTextSize(3);
+      img.setTextColor(TFT_GREEN, TFT_BLACK); // Set text color and background (to overwrite old text)
+      img.setCursor(10,10);
+      img.print(t);
+    }
+    #define LINE_SIZE 16
+    #define LIST_SIZE TFT_HEIGHT/LINE_SIZE
+#elif defined ssd1306
 
+
+#endif
 
     void lcdDisplay(){
       int x=8;
       int y=0;
-      img.fillScreen(TFT_BLACK); // Clear the screen with black color
-      for(uint8_t i=select;i<len;i++){
-        if(y>128)break;
-        if(i==select)displayMenuItem(0,y,">");
-        displayMenuItem(x,y,menu[i]->label);
-
-///display text to 4 decimal places
-/*
-        if(menu[i]->actFunc==NULL && menu[i]->active){
-          String t=String(*menu[i]->value);
-          displayMenuItem(80,y,t);
-        }
-*/
-        y+=16;
-
+      if(menu[select]->actFunc==NULL && menu[select]->active){
+        displayItemValue(*menu[select]->value);
       }
-      img.pushSprite(0,0);
+      else{
+        int start = ((select>LIST_SIZE)?select-LIST_SIZE:0);
+        for(uint8_t i=start;i<len;i++){
+            if(y>TFT_HEIGHT)break;
+            if(i==select){
+              displayMenuItem(0,y,menu[i]->label,true);
+            }
+            else displayMenuItem(0,y,menu[i]->label,false);
+            y+=LINE_SIZE;
+        }
+      }
       updateMenu=false;
     }
     void serialDisplay(){
@@ -88,10 +105,10 @@ class lcdMenu{
       Serial.print("menuitems ");
       Serial.println(len);
     }
-    void lcdUp(){
+    void lcdDown(){
 
        if(menu[select]->active==true){
-        if(menu[select]->upFunc!=NULL)menu[select]->upFunc(menu[select]->value);
+        if(menu[select]->downFunc!=NULL)menu[select]->downFunc(menu[select]->value);
        }
        else {
         if(select<len-1)select++;
@@ -99,9 +116,9 @@ class lcdMenu{
 
       updateMenu=true;
     }
-    void lcdDown(){
+    void lcdUp(){
        if(menu[select]->active==true){
-        if(menu[select]->downFunc!=NULL)menu[select]->downFunc(menu[select]->value);
+        if(menu[select]->upFunc!=NULL)menu[select]->upFunc(menu[select]->value);
        }
        else{
         if(select>0) select--;
@@ -109,14 +126,12 @@ class lcdMenu{
       updateMenu=true;
     }
     void lcdSelect(){
-      if(menu[select]->active){
-        menu[select]->active=false;
-//        lcdSave();
-      }
+      if(menu[select]->active)menu[select]->active=false;
       else menu[select]->active=true;
 
       if(menu[select]->actFunc!=NULL){
         menu[select]->actFunc((char*)menu[select]->label);
+        return;
       }
       updateMenu=true;
     }

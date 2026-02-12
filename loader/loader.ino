@@ -1,7 +1,8 @@
 #include "esp_ota_ops.h"
+#include "nvs_flash.h"
 #include "FS.h"
+#include <SD.h>
 #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
-#include "SD.h"
 #include <EEPROM.h>
 
 #define BUTTON_PIN A5
@@ -16,7 +17,7 @@ int miso = SD_MISO;
 int mosi = TFT_MOSI;
 int cs = SD_CS;
 
-TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
+TFT_eSPI tft = TFT_eSPI(128,160);  // Invoke library, pins defined in User_Setup.h
 TFT_eSprite img = TFT_eSprite(&tft);  // Create Sprite object "img" with pointer to "tft" object
 
 #include "menu.h"
@@ -26,7 +27,7 @@ TFT_eSprite img = TFT_eSprite(&tft);  // Create Sprite object "img" with pointer
 lcdMenu mainMenu;
 
 
-uint32_t get_app_partition_address() {
+/*uint32_t get_app_partition_address() {
     const esp_partition_t* app_partition=esp_ota_get_boot_partition();
  
      if (app_partition != NULL) {
@@ -59,8 +60,41 @@ void get_partition_info(void) {
         Serial.printf("Data partition not found!");
     }
 }
+void writeFile(fs::FS &fs, const char *path, uint8_t* data,int len) {
+  Serial.printf("Writing file: %s\n", path);
 
+  File file = fs.open(path, FILE_WRITE);
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if (file.write(data, len)) {
+    Serial.println("File written");
+  } else {
+    Serial.println("Write failed");
+  }
+  file.close();
+}
 
+///GET SETTINGS SAVED IN MEMORY
+  nvs_handle_t my_handle;
+  ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &my_handle)); 
+  ESP_ERROR_CHECK(nvs_set_u8(my_handle, name, &data[i]));
+  nvs_close(my_handle);
+*/
+
+/////////////////////////////////////////////
+// for my button switches i used one analog pin with 10k pullup.
+// the pulldown resistors on the switches where:
+// 1 = 100
+// 2 = 330
+// 3 = 1k
+// 4 = 1.8k
+// 5 = 3k
+// the numbers dont work like I wanted somehow the 100 is too low.
+//4095*(100/10100) is 40 , not zero.
+// I had room for more buttons.
+///////////////////////////////////////////////
 int8_t checkButtons(){
   int sensorValue = 0;
   for(int i=0;i<32;i++){
@@ -78,21 +112,9 @@ int8_t checkButtons(){
   return -1;
 }
 
-void readFile(fs::FS &fs, const char *path) {
-  Serial.printf("Reading file: %s\n", path);
 
-  File file = fs.open(path);
-  if (!file) {
-    Serial.println("Failed to open file for reading");
-    return;
-  }
+ 
 
-  Serial.print("Read from file: ");
-  while (file.available()) {
-    Serial.write(file.read());
-  }
-  file.close();
-}
 //this is the main function. IT takes the bin file from the sd card and loads it into memory.
 // Then it set the pointer to the begining and reboots.
 //you have to set the boot partition back to the bootloader in your program code or it will be stuck.
@@ -105,30 +127,38 @@ void readFile(fs::FS &fs, const char *path) {
 /*
     esp_restart();
 */ 
+#define BUFFER_SIZE 4096
+  static uint8_t buf[BUFFER_SIZE];
+
 void runProgram(char* name){
+  uint32_t len=0;
+
+  img.fillRect(0,0,TFT_WIDTH,TFT_HEIGHT,TFT_BLACK);
+  img.setCursor(32,32);
+  img.print("LOADING...");
+  img.pushSprite(0,0);  
+
   Serial.print("running ");
   Serial.println(name);
   File file = SD.open(name);
-  static uint8_t buf[512];
-  uint32_t len=0;
   
   esp_ota_handle_t update_handle;
   const esp_partition_t *partition = esp_ota_get_next_update_partition(NULL);
   ESP_ERROR_CHECK(esp_ota_begin(partition,OTA_SIZE_UNKNOWN,&update_handle));
-  ESP_ERROR_CHECK(esp_ota_set_final_partition(update_handle,partition,true));
+//  ESP_ERROR_CHECK(esp_ota_set_final_partition(update_handle,partition,true));
   len=file.size();
     while (len) {
       Serial.print("writing...");
       Serial.println(len);
       size_t toRead = len;
-      if (toRead > 512) {
-        toRead = 512;
+      if (toRead > BUFFER_SIZE) {
+        toRead = BUFFER_SIZE;
       }
       file.read(buf, toRead);
       ESP_ERROR_CHECK(esp_ota_write(update_handle,buf,toRead));
       len -= toRead;
     }
-            delay(500);
+//            delay(500);
   ESP_ERROR_CHECK(esp_ota_end(update_handle));
   if (ESP_OK == esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL))) {
     esp_restart();
@@ -168,26 +198,25 @@ void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
   file.close();
 }
 
-void writeFile(fs::FS &fs, const char *path, uint8_t* data,int len) {
-  Serial.printf("Writing file: %s\n", path);
-
-  File file = fs.open(path, FILE_WRITE);
-  if (!file) {
-    Serial.println("Failed to open file for writing");
-    return;
-  }
-  if (file.write(data, len)) {
-    Serial.println("File written");
-  } else {
-    Serial.println("Write failed");
-  }
-  file.close();
-}
 
 void setup() {
   Serial.begin(115200);
-  get_partition_info();
-  uint32_t startBoot = get_app_partition_address();
+
+
+///test flash memory write
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
+      ESP_LOGE("INIT", "ERASING NVS");
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK( ret );
+
+  nvs_handle_t my_handle;
+  ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &my_handle)); 
+  ESP_ERROR_CHECK(nvs_set_str(my_handle, "test", "test"));
+  nvs_close(my_handle);
+
 
   SPI.begin(sck, miso, mosi, cs);
   if (!SD.begin(cs) ){
@@ -207,21 +236,21 @@ void setup() {
 
  // Setup the LCD
   tft.init();
+  img.createSprite(160, 128);
+
   tft.initDMA(); // To use SPI DMA you must call initDMA() to setup the DMA engine
 
   tft.setSwapBytes(true);
+  tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
-  tft.setRotation(5);
-  tft.setTextSize(1);        // Make it readable
-  tft.setTextWrap(true);     // Turn on the magic
 
-  img.createSprite(160, 128);
-
+  tft.setTextSize(1);
+//  tft.setTextWrap(true);     // Turn on the magic
 
 
   listDir(SD,"/",0);
 
-  mainMenu.lcdDisplay();
+ // mainMenu.lcdDisplay();
 
 }
 
@@ -230,8 +259,9 @@ void loop() {
 
   uint8_t button=checkButtons(); 
   if(mainMenu.updateMenu){
-//    mainMenu.serialDisplay();
+    img.fillSprite(TFT_BLACK);
     mainMenu.lcdDisplay();
+    img.pushSprite(0,0);
   }
   if(button==1)mainMenu.lcdUp();
   if(button==3)mainMenu.lcdDown();
