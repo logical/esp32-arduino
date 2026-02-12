@@ -25,6 +25,7 @@ class lcdMenu{
   public:
     int len=0;
     int select=0;
+    int start=0;
 
     bool updateMenu=true;
     lcdMenuItem *menu[16];
@@ -51,7 +52,7 @@ class lcdMenu{
       img.print(t);
     }
     #define LINE_SIZE 16
-    #define LIST_SIZE TFT_HEIGHT/LINE_SIZE
+    #define PAGE_SIZE (TFT_HEIGHT/LINE_SIZE)
 #elif defined ssd1306
 
 
@@ -64,7 +65,6 @@ class lcdMenu{
         displayItemValue(*menu[select]->value);
       }
       else{
-        int start = ((select>LIST_SIZE)?select-LIST_SIZE:0);
         for(uint8_t i=start;i<len;i++){
             if(y>TFT_HEIGHT)break;
             if(i==select){
@@ -112,6 +112,8 @@ class lcdMenu{
        }
        else {
         if(select<len-1)select++;
+        if(select>=start+PAGE_SIZE)start++;
+
        }
 
       updateMenu=true;
@@ -122,6 +124,7 @@ class lcdMenu{
        }
        else{
         if(select>0) select--;
+        if(select<start)start--;
        }
       updateMenu=true;
     }
