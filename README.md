@@ -5,7 +5,7 @@ disclaimer:
 When I say projects I mean experiments. some of them don't really work ,yet.
 ### neurosky_web3.ino
 
-this is an example of creating a wireless eeg device from a mattel mindflex with a neurosky module. The wiring is easy. The power for the esp32 module comes from the existing wireless module that I removed. the uart is marked with t and r for transmit and receive. A passive buzzer is used for biofeedback.
+this is an example of creating a wireless eeg device from a mattel mindflex with a neurosky module. The wiring is easy. The power for the esp32 module comes from the existing wireless module that I removed. the uart is marked with t and r for transmit and receive. A passive buzzer is used for biofeedback. Google Gemini helped with the web interface.
 
 ### qrcodes
 
