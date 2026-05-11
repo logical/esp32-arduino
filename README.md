@@ -3,6 +3,11 @@
 My projects for esp32.
 disclaimer:
 When I say projects I mean experiments. some of them don't really work ,yet.
+
+### qrcodes
+
+example of reading qr code from camera and writing them to display. this also shows how to return to the bootloader from the program by setting the boot partition as the first action in setup. that way if our code crashes you are not stuck in a loop of rebooting and crashing. it still has bugs in it.
+
 ### loader 
 
 this is a bootloader that is for portable devices. it uses an lcd to select bin file from an sd card. it loads and runs the bin file. you have to slightly modify the bin file program to point back to the bootloader or you will be stuck in the program. I'm happy with it for now.
